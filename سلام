@@ -1,0 +1,95 @@
+const express = require("express");
+const bodyParser = require("body-parser");
+const request = require("request");
+
+const app = express();
+app.use(bodyParser.json());
+
+const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "arabic-bot";
+
+// دالة إرسال رسالة
+function sendMessage(senderId, messageText) {
+  request(
+    {
+      url: "https://graph.facebook.com/v17.0/me/messages",
+      qs: { access_token: PAGE_ACCESS_TOKEN },
+      method: "POST",
+      json: {
+        recipient: { id: senderId },
+        message: { text: messageText },
+      },
+    },
+    (error, response, body) => {
+      if (error) {
+        console.error("خطأ في الإرسال:", error);
+      } else if (response.body.error) {
+        console.error("خطأ من API:", response.body.error);
+      }
+    }
+  );
+}
+
+// تحقق من Webhook
+app.get("/", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+
+  if (mode && token) {
+    if (mode === "subscribe" && token === VERIFY_TOKEN) {
+      console.log("✅ Webhook verified");
+      res.status(200).send(challenge);
+    } else {
+      res.sendStatus(403);
+    }
+  } else {
+    res.send("✅ البوت شغال");
+  }
+});
+
+// استقبال الرسائل
+app.post("/", (req, res) => {
+  const body = req.body;
+
+  if (body.object === "page") {
+    body.entry.forEach(function (entry) {
+      const webhook_event = entry.messaging[0];
+      const senderId = webhook_event.sender.id;
+
+      if (webhook_event.message && webhook_event.message.text) {
+        const message = webhook_event.message.text;
+
+        let reply;
+        if (message.includes("السلام")) {
+          reply = "وعليكم السلام ورحمة الله 🌸";
+        } else if (message.includes("كيفك")) {
+          reply = "الحمد لله بخير 🙌 وأنت؟";
+        } else if (message.includes("اسمك")) {
+          reply = "أنا بوت عربي لخدمتك 🤖";
+        } else if (message.includes("مرحبا") || message.includes("اهلا")) {
+          reply = "أهلاً وسهلاً 👋 نورت الدردشة!";
+        } else if (message.includes("باي") || message.includes("مع السلامة")) {
+          reply = "🤍 في أمان الله، نلقاك بخير!";
+        } else if (message.includes("مساعدة")) {
+          reply = "الأوامر المتاحة: السلام، كيفك، اسمك، مرحبا، باي، الدعاء.";
+        } else if (message.includes("دعاء") || message.includes("الدعاء")) {
+          reply = "🌿 اللهم صلِّ وسلم على نبينا محمد ﷺ";
+        } else {
+          reply =
+            "ما فهمت قصدك 🤔 جرب تكتب (السلام، كيفك، اسمك، مرحبا، باي، مساعدة، الدعاء).";
+        }
+
+        sendMessage(senderId, reply);
+      }
+    });
+    res.status(200).send("EVENT_RECEIVED");
+  } else {
+    res.sendStatus(404);
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 البوت شغال على المنفذ ${PORT}`);
+});
